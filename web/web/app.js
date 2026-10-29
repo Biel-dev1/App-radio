@@ -616,7 +616,7 @@
       if (bomb && hit) mark(c, "bomb", "💥"); else if (bomb) mark(c, "sel", "💣"); else if (hit) mark(c, "okc", "✔");
     }, null);
     return [h("h2", { text: st.name }), h("p", { class: myTurn ? "ok" : "dim", text: myTurn ? "Sua vez! Abra uma casa do tabuleiro do adversário." : "Vez de " + ((opp && opp.name) || "adversário") + "…" }), timer,
-      h("div", { class: "label", text: "TABULEIRO DE " + String((opp && opp.name) || "ADVERSÁRIO").toUpperCase() }), opBoard, h("div", { class: "label", text: "SEU TABULEIRO" }), myBoard, leaveBtn("Desistir e sair")];
+      h("div", { class: "duel" }, h("div", {}, h("div", { class: "label", text: "TABULEIRO DE " + String((opp && opp.name) || "ADVERSÁRIO").toUpperCase() }), opBoard), h("div", {}, h("div", { class: "label", text: "SEU TABULEIRO" }), myBoard)), leaveBtn("Desistir e sair")];
   };
 
   const roomOver = (st) => {

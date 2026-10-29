@@ -47,3 +47,26 @@ input:focus,textarea:focus{border-color:var(--b)}
 .check{display:flex;gap:10px;align-items:flex-start;margin-top:14px}.check input{width:20px;height:20px;margin-top:2px;flex:none}
 #toasts{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:40;width:min(440px,calc(100% - 24px));pointer-events:none}
 .toast{background:#1d1d48;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;font-size:14px}
+
+/* ---------- computador / tela grande ---------- */
+@media (hover:hover){.btn:not(:disabled):hover{filter:brightness(1.12)}.chip:hover,.cell:not(:disabled):hover,.bal:hover{filter:brightness(1.25)}.link:hover{text-decoration:underline}}
+@media (min-width:860px){
+  #app{max-width:760px;padding-top:96px;padding-bottom:40px}
+  h1{font-size:32px}
+  .card{padding:24px;border-radius:24px}
+  /* barra de abas no topo, centralizada */
+  .nav{top:16px;bottom:auto;width:min(560px,calc(100% - 48px))}
+  .nav button{font-size:15px;padding:12px 6px}
+  .nav button:not(.on):hover{color:#fff;background:rgba(255,255,255,.06)}
+  .top{margin-top:8px}
+  .board{max-width:420px;gap:8px}
+  .board.small{max-width:260px;gap:5px}
+  .cell{font-size:24px}
+  .modal{width:min(480px,100%);padding:28px}
+  .btn{max-width:100%}
+  #toasts{top:84px}
+}
+@media (min-width:1100px){
+  #app{max-width:860px}
+}
+@media (min-width:860px){.duel{display:grid;grid-template-columns:1.4fr 1fr;gap:28px;align-items:start}.duel .board{margin-top:8px}}
