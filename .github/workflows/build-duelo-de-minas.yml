@@ -9,7 +9,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Fixo no 24.04: o "ubuntu-latest" está migrando para o Ubuntu 26 (desde 19/10/2026) de forma
+    # gradual, e o Gradle 8.9 tem um bug de "file system watching" nesse kernel mais novo que faz
+    # o mapDebugSourceSetPaths dar "Could not stat file .../res" mesmo a pasta existindo.
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
