@@ -3,5 +3,5 @@
 window.CONFIG = {
   SUPABASE_URL: "https://zrvzrxbkviurspuotdzi.supabase.co",
   SUPABASE_KEY: "sb_publishable_rZ2k0xRnjtXDZGhlS0K-Ng_HBqCgmnI",
-  WS_URL: "wss://y6z95j.bot-keep.xyz"
+  WS_URL: "wss://vgkvax.bot-keep.xyz"
 };
