@@ -70,3 +70,5 @@ input:focus,textarea:focus{border-color:var(--b)}
   #app{max-width:860px}
 }
 @media (min-width:860px){.duel{display:grid;grid-template-columns:1.4fr 1fr;gap:28px;align-items:start}.duel .board{margin-top:8px}}
+select,select option{background:#141436;color:#fff;font-family:inherit}
+select.chip{width:100%;padding:12px;text-align:left}
