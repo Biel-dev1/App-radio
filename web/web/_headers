@@ -1,5 +1,5 @@
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://zrvzrxbkviurspuotdzi.supabase.co; connect-src 'self' https://zrvzrxbkviurspuotdzi.supabase.co wss://node17.botkeep.cloud:57517; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://zrvzrxbkviurspuotdzi.supabase.co; connect-src 'self' https://zrvzrxbkviurspuotdzi.supabase.co wss://y6z95j.bot-keep.xyz; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
