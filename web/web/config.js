@@ -3,5 +3,5 @@
 window.CONFIG = {
   SUPABASE_URL: "https://zrvzrxbkviurspuotdzi.supabase.co",
   SUPABASE_KEY: "sb_publishable_rZ2k0xRnjtXDZGhlS0K-Ng_HBqCgmnI",
-  WS_URL: "wss://minas-cbea.onrender.com"
+  WS_URL: "wss://node17.botkeep.cloud:57517"
 };
