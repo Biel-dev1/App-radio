@@ -191,10 +191,19 @@
       w.onclose = () => this.lost(w);
       w.onerror = () => {};
     },
+    // Ao voltar para a aba: se a conexão caiu ou ficou escondida mais de 15 s, reconecta já.
+    reconnectNow(force) {
+      if (!this.wanted) return;
+      if (this.connected && !force) return;
+      clearTimeout(this.retryTimer);
+      const old = this.ws; this.ws = null; this.connected = false;
+      try { if (old) old.close(1000); } catch (_) {}
+      this.attempt = 0; this.open();
+    },
     lost(w) {
       if (w && w !== this.ws) return;
       this.connected = false;
-      if (this.wanted) { this.attempt++; setTimeout(() => this.open(), Math.min(15000, 1500 * this.attempt)); }
+      if (this.wanted) { this.attempt++; this.retryTimer = setTimeout(() => this.open(), Math.min(15000, 1500 * this.attempt)); }
     },
     send(type, extra) {
       if (!this.ws || !this.connected || this.ws.readyState !== 1) return false;
@@ -632,6 +641,12 @@
   };
 
   // ------------------------------------------------------------ início
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && sess && Game.wanted && Game.connected) Game.send("sync"); });
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (!sess || !Game.wanted) return;
+    if (!Game.connected || (hiddenAt && Date.now() - hiddenAt > 15000)) Game.reconnectNow(true);
+    else Game.send("sync");
+  });
   show();
 })();
