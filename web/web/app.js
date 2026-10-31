@@ -1,3 +1,4 @@
+
 "use strict";
 /* Duelo de Minas — versão web.
  * Segurança: todo texto vindo de jogadores é inserido com textContent (nunca innerHTML),
@@ -24,6 +25,7 @@
     }
     return el;
   };
+  const ic = (n, s) => window.Icon(n, s);
   const money = (c) => "R$ " + (Number(c || 0) / 100).toFixed(2).replace(".", ",");
   const parseCents = (s) => {
     const n = Number(String(s).trim().replace(/\./g, "").replace(",", "."));
@@ -51,7 +53,7 @@
     const ok = typeof url === "string" && url.startsWith(C.SUPABASE_URL + "/storage/");
     return h("div", { class: "av" + (big ? " big" : "") }, ok ? h("img", { src: url, alt: "", referrerPolicy: "no-referrer" }) : initial(name));
   };
-  const nameBadge = (name, verified) => h("span", {}, name || "Jogador", verified ? h("span", { class: "badge", text: "✔" }) : null);
+  const nameBadge = (name, verified) => h("span", {}, name || "Jogador", verified ? h("span", { class: "badge" }, ic("verified", 15)) : null);
 
   let modalClose = null;
   const modal = (title, body, actions) => {
@@ -64,7 +66,7 @@
     modalClose = close;
     return close;
   };
-  const btn = (label, fn, cls) => h("button", { class: "btn " + (cls || ""), type: "button", onclick: fn, text: label });
+  const btn = (label, fn, cls, icon) => h("button", { class: "btn " + (cls || ""), type: "button", onclick: fn }, icon ? ic(icon, 18) : null, label);
   const confirmBox = (title, msg, okLabel, fn, danger) =>
     modal(title, h("p", { class: "dim", text: msg }), (close) => [
       btn(okLabel, () => { close(); fn(); }, danger ? "danger" : ""),
@@ -158,7 +160,15 @@
       try { const a = await call("POST", "/rest/v1/rpc/verified_ids", {}); return new Set(a.map((v) => (v && typeof v === "object" ? v.verified_ids || v.id : v))); } catch (_) { return new Set(); }
     },
     acceptTerms: (v) => call("POST", "/rest/v1/rpc/accept_terms", { p_version: v }),
-    completeProfile: (name, bio) => call("POST", "/rest/v1/rpc/complete_profile", { p_display_name: name, p_bio: bio, p_country: "BR", p_avatar_url: null }),
+    completeProfile: (name, bio, url) => call("POST", "/rest/v1/rpc/complete_profile", { p_display_name: name, p_bio: bio, p_country: "BR", p_avatar_url: url || null }),
+    // Foto: mesmo caminho do app (bucket "avatars", um arquivo por jogador). O perfil guarda o endereço público.
+    async uploadAvatar(blob) {
+      const t = await token();
+      const r = await fetch(C.SUPABASE_URL + "/storage/v1/object/avatars/" + sess.uid + "/avatar.jpg", { method: "POST", headers: { apikey: C.SUPABASE_KEY, Authorization: "Bearer " + t, "Content-Type": "image/jpeg", "x-upsert": "true" }, body: blob, credentials: "omit", referrerPolicy: "no-referrer" });
+      if (!r.ok) throw new ApiError(r.status, "Não foi possível enviar a foto. Tente de novo.");
+      try { await call("DELETE", "/storage/v1/object/avatars/" + sess.uid + "/avatar.gif"); } catch (_) {}
+      return C.SUPABASE_URL + "/storage/v1/object/public/avatars/" + sess.uid + "/avatar.jpg?v=" + Date.now();
+    },
     hasPin: async () => { try { return (await call("POST", "/rest/v1/rpc/has_security_pin", {})) === true; } catch (_) { return false; } },
     setPin: (pin, cur) => call("POST", "/rest/v1/rpc/set_my_security_pin", { p_pin: pin, p_current: cur || null }),
     changeUsername: (u) => call("POST", "/rest/v1/rpc/change_username", { p_username: u }),
@@ -266,6 +276,7 @@
     });
   };
 
+  const brand = () => h("div", { class: "brand" }, h("div", { class: "tile" }, ic("bomb", 34)), h("h1", { text: "Duelo de Minas" }));
   const logout = () => { Game.stop(); closeSearching(); bg(() => api.signOut(), () => { S.me = null; show(); }); };
 
   // ------------------------------------------------------------ login / cadastro
@@ -292,8 +303,8 @@
     };
     toggle.onclick = () => { signup = !signup; paint(); };
     paint();
-    mount(h("h1", { class: "center mt20", text: "Duelo de Minas" }), h("p", { class: "dim center", text: "Entre para jogar seu x1." }),
-      h("div", { class: "card" }, h("div", { class: "label", text: "E-MAIL" }), email, h("div", { class: "label", text: "SENHA" }), pass, note, go, h("div", { class: "center" }, toggle)));
+    mount(brand(), h("p", { class: "dim center", text: "Entre para jogar seu x1." }),
+      h("div", { class: "card" }, h("div", { class: "label", text: "E-mail" }), email, h("div", { class: "label", text: "Senha" }), pass, note, go, h("div", { class: "center" }, toggle)));
   };
 
   const viewTerms = () => {
@@ -309,28 +320,74 @@
   };
 
   const viewSetup = () => {
+    const pk = photoPicker(null);
     const name = h("input", { maxLength: 20, placeholder: "Como você quer ser chamado" });
     const bio = h("textarea", { maxLength: 200, rows: 3, placeholder: "Fale um pouco sobre você (opcional)" });
     const go = btn("Concluir", () => {
       const n = name.value.trim();
       if (n.length < 3) return toast("O nome precisa ter pelo menos 3 letras.");
       busy(go, true);
-      bg(async () => { await api.completeProfile(n, bio.value.trim()); return api.profile(); }, (p) => { S.me = p; show(); }, () => busy(go, false));
+      bg(async () => { const u = pk.blob() ? await api.uploadAvatar(pk.blob()) : null; await api.completeProfile(n, bio.value.trim(), u); return api.profile(); }, (p) => { S.me = p; show(); }, () => busy(go, false));
     });
     mount(h("h1", { text: "Seu perfil" }), h("p", { class: "dim", text: "Antes de jogar, conte quem você é." }),
-      h("div", { class: "card" }, h("div", { class: "label", text: "NOME DE EXIBIÇÃO" }), name, h("div", { class: "label", text: "BIO" }), bio, go, btn("Sair", logout, "ghost")));
+      h("div", { class: "card" }, pk.el, h("div", { class: "label", text: "Nome de exibição" }), name, h("div", { class: "label", text: "Bio" }), bio, go, btn("Sair", logout, "ghost")));
+  };
+
+  // ------------------------------------------------------------ foto de perfil
+  // Recorta em quadrado, reduz para 512 px e vira JPEG (leve, e já no formato que o app usa).
+  const squareJpeg = (f, px) => new Promise((ok, no) => {
+    if (f.size > 15e6) return no(new Error("grande"));
+    const r = new FileReader();
+    r.onerror = no;
+    r.onload = () => {
+      const im = new Image();
+      im.onerror = no;
+      im.onload = () => {
+        const s = Math.min(im.width, im.height), cv = document.createElement("canvas");
+        cv.width = cv.height = px;
+        cv.getContext("2d").drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, 0, 0, px, px);
+        cv.toBlob((b) => (b ? ok({ blob: b, url: cv.toDataURL("image/jpeg", 0.85) }) : no(new Error("falha"))), "image/jpeg", 0.85);
+      };
+      im.src = r.result;
+    };
+    r.readAsDataURL(f);
+  });
+  const photoPicker = (cur) => {
+    let blob = null;
+    const prev = h("div", {}, avatar(S.me && S.me.display_name, cur, true));
+    const file = h("input", { type: "file", accept: "image/*", hidden: true });
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      try { const o = await squareJpeg(f, 512); blob = o.blob; prev.replaceChildren(h("div", { class: "av big" }, h("img", { src: o.url, alt: "" }))); }
+      catch (_) { blob = null; toast("Não deu para ler essa imagem. Escolha outra foto."); }
+    });
+    return { el: h("div", { class: "center" }, prev, file, btn("Escolher foto", () => file.click(), "ghost", "camera")), blob: () => blob };
+  };
+  const showEditProfile = () => {
+    const pk = photoPicker(S.me.avatar_url);
+    const name = h("input", { maxLength: 20, value: S.me.display_name || "" });
+    const bio = h("textarea", { maxLength: 200, rows: 3, value: S.me.bio || "" });
+    modal("Editar perfil", h("div", {}, pk.el, h("div", { class: "label", text: "Nome de exibição" }), name, h("div", { class: "label", text: "Bio" }), bio), (close) => [
+      btn("Salvar", (ev) => {
+        const n = name.value.trim(), b = ev.currentTarget;
+        if (n.length < 3) return toast("O nome precisa ter pelo menos 3 letras.");
+        busy(b, true);
+        bg(async () => { const u = pk.blob() ? await api.uploadAvatar(pk.blob()) : null; await api.completeProfile(n, bio.value.trim(), u); return api.profile(); },
+          (p) => { S.me = p; close(); toast("Perfil atualizado."); show(); }, () => busy(b, false));
+      }), btn("Cancelar", close, "ghost")]);
   };
 
   // ------------------------------------------------------------ telas principais
   const header = () => h("div", { class: "top" }, avatar(S.me.display_name, S.me.avatar_url),
     h("div", { class: "who" }, h("span", { class: "dim", text: greeting() }), h("b", { text: S.me.display_name || "Jogador" })),
-    h("button", { class: "bal", type: "button", "data-bal": "1", text: money(S.me.balance_cents), onclick: showDeposit, "aria-label": "Adicionar saldo" }));
+    h("button", { class: "bal", type: "button", onclick: showDeposit, "aria-label": "Adicionar saldo" }, ic("wallet", 17), h("span", { "data-bal": "1", text: money(S.me.balance_cents) })));
   const greeting = () => { const x = new Date().getHours(); return x < 12 ? "Bom dia" : x < 18 ? "Boa tarde" : "Boa noite"; };
 
   const viewMain = () => {
-    const tabs = ["Lobby", "Amigos", "Ranking", "Perfil"];
+    const tabs = [["Lobby", "home"], ["Amigos", "users"], ["Ranking", "trophy"], ["Perfil", "profile"]];
     const content = h("div");
-    const nav = h("nav", { class: "nav" }, tabs.map((t, i) => h("button", { type: "button", class: i === S.tab ? "on" : "", text: t, onclick: () => { S.tab = i; viewMain(); } })));
+    const nav = h("nav", { class: "nav" }, tabs.map((t, i) => h("button", { type: "button", class: i === S.tab ? "on" : "", "aria-label": t[0], onclick: () => { S.tab = i; viewMain(); } }, ic(t[1], 22), h("span", { text: t[0] }))));
     mount(header(), content, nav);
     [tabLobby, tabFriends, tabRanking, tabProfile][S.tab](content);
   };
@@ -350,15 +407,15 @@
       list.forEach((v) => row.append(h("button", { class: "chip", type: "button", "data-v": v, text: fmt(v), onclick: () => { set(v); paint(); } })));
       paint(); return row;
     };
-    const go = btn("ENCONTRAR PARTIDA", () => {
+    const go = btn("Encontrar partida", () => {
       const c = parseCents(stake.value);
       if (!c || c < Game.cfg.minStakeCents || c > Game.cfg.maxStakeCents) return toast("O valor precisa ficar entre " + money(Game.cfg.minStakeCents) + " e " + money(Game.cfg.maxStakeCents) + ".");
       if ((S.me.balance_cents || 0) < c + feeOf(c)) return toast("Saldo insuficiente (" + money(S.me.balance_cents) + "). Adicione saldo para buscar partida.");
       if (!Game.send("find_match", { stakeCents: c, mines: lobbyMines })) toast("Conectando ao servidor… tente em instantes.");
     });
     root.append(h("div", { class: "card" }, h("h2", { text: "Encontrar Partida" }), h("p", { class: "dim", text: "Dispute contra outros jogadores online." }),
-      h("div", { class: "label", text: "QUANTIDADE DE MINAS" }), chips([1, 3, 5, 7, 10], () => lobbyMines, (v) => { lobbyMines = v; }, String),
-      h("div", { class: "label", text: "VALOR DO X1 (R$)" }), stake,
+      h("div", { class: "label", text: "Quantidade de minas" }), chips([1, 3, 5, 7, 10], () => lobbyMines, (v) => { lobbyMines = v; }, String),
+      h("div", { class: "label", text: "Valor do x1 (R$)" }), stake,
       chips([2, 5, 10, 20], () => null, (v) => { stake.value = v + ",00"; calc(); }, (v) => "R$ " + v), info, go));
   };
   const feeOf = (c) => Math.round((c * Game.cfg.feePercent) / 100);
@@ -381,11 +438,11 @@
 
   const tabProfile = (root) => {
     const p = S.me;
-    root.append(h("div", { class: "card center" }, avatar(p.display_name, p.avatar_url, true), h("h2", { class: "mt14" }, nameBadge(p.display_name, p.verified)),
+    root.append(h("div", { class: "card center" }, h("div", { class: "avwrap" }, avatar(p.display_name, p.avatar_url, true), h("button", { class: "camera", type: "button", onclick: showEditProfile, "aria-label": "Alterar foto" }, ic("camera", 16))), h("h2", { class: "mt14" }, nameBadge(p.display_name, p.verified)),
       h("p", { class: "dim", text: "@" + (p.username || "") }), p.bio ? h("p", { class: "dim", text: p.bio }) : null,
-      h("p", { class: "big", "data-bal": "1", text: money(p.balance_cents) }), btn("Adicionar saldo", showDeposit), btn("Sacar saldo", showWithdraw, "ghost")),
-      h("div", { class: "card" }, btn("Senha de 6 dígitos", showPinSetup, "ghost"), btn("Alterar @usuário", showChangeUsername, "ghost"), btn("Sair da conta", logout, "ghost"),
-        btn("Excluir minha conta", () => confirmBox("Excluir conta?", "Isso apaga seu perfil e não dá para desfazer. Contas com partida em andamento não podem ser apagadas.", "Excluir", () => bg(() => api.deleteAccount(), () => { Game.stop(); S.me = null; show(); }), true), "danger")));
+      h("p", { class: "big", "data-bal": "1", text: money(p.balance_cents) }), btn("Adicionar saldo", showDeposit, "", "plus"), btn("Sacar saldo", showWithdraw, "ghost", "up")),
+      h("div", { class: "card" }, btn("Editar perfil", showEditProfile, "ghost", "edit"), btn("Senha de 6 dígitos", showPinSetup, "ghost", "lock"), btn("Alterar @usuário", showChangeUsername, "ghost", "at"), btn("Sair da conta", logout, "ghost", "logout"),
+        btn("Excluir minha conta", () => confirmBox("Excluir conta?", "Isso apaga seu perfil e não dá para desfazer. Contas com partida em andamento não podem ser apagadas.", "Excluir", () => bg(() => api.deleteAccount(), () => { Game.stop(); S.me = null; show(); }), true), "danger", "trash")));
   };
 
   // ------------------------------------------------------------ modais (saldo, pin, salas)
@@ -420,7 +477,7 @@
     const amount = h("input", { inputMode: "decimal", placeholder: "0,00", maxLength: 9 });
     const cpf = h("input", { inputMode: "numeric", placeholder: "CPF (só números)", maxLength: 14, autocomplete: "off" });
     const chips = h("div", { class: "chips" }, [10, 20, 50, 100].map((v) => h("button", { class: "chip", type: "button", text: "R$ " + v, onclick: () => { amount.value = v + ",00"; } })));
-    modal("Adicionar saldo", h("div", {}, h("div", { class: "label", text: "VALOR (R$)" }), amount, chips, h("div", { class: "label", text: "CPF DO PAGADOR" }), cpf,
+    modal("Adicionar saldo", h("div", {}, h("div", { class: "label", text: "Valor (R$)" }), amount, chips, h("div", { class: "label", text: "CPF do pagador" }), cpf,
       h("p", { class: "faint", text: "Depósito mínimo: " + money(min) + ". Após gerar o Pix, pague e o saldo entra sozinho." })), (close) => [
       btn("Gerar Pix", () => {
         const c = parseCents(amount.value), d = cpf.value.replace(/\D/g, "");
@@ -434,10 +491,13 @@
   const showPix = (o) => {
     if (!o.pixCode) return toast("Não veio o código Pix.");
     const done = h("p", { class: "dim center", text: "Aguardando o pagamento…" });
-    const close = modal("Pague com Pix " + money(o.cents), h("div", {}, h("p", { class: "dim", text: "Copie o código e cole no app do seu banco (Pix Copia e Cola)." }), h("div", { class: "code", text: o.pixCode }), done), (cl) => [
-      btn("Copiar código", async (ev) => { try { await navigator.clipboard.writeText(o.pixCode); ev.target.textContent = "Copiado ✔"; } catch (_) { toast("Não deu para copiar. Selecione o texto."); } }),
+    // QR gerado aqui no aparelho (qr.js), sem enviar o código Pix para nenhum serviço externo.
+    let qr = null;
+    try { qr = window.QR.draw(h("canvas", { class: "qr", role: "img", "aria-label": "QR Code do Pix" }), o.pixCode, 480); } catch (_) { qr = null; }
+    const close = modal("Pague com Pix " + money(o.cents), h("div", {}, h("p", { class: "dim", text: qr ? "Aponte a câmera do app do seu banco para o QR Code ou use o Pix Copia e Cola abaixo." : "Copie o código e cole no app do seu banco (Pix Copia e Cola)." }), qr, h("div", { class: "code", text: o.pixCode }), done), (cl) => [
+      btn("Copiar código", async (ev) => { const b = ev.currentTarget; try { await navigator.clipboard.writeText(o.pixCode); b.replaceChildren(ic("check", 18), "Copiado"); } catch (_) { toast("Não deu para copiar. Selecione o texto."); } }),
       btn("Fechar", () => { cl(); S.onCredit = null; Game.send("deposit_cancel", { identifier: o.identifier }); }, "ghost")]);
-    S.onCredit = (id) => { if (id === o.identifier) { done.textContent = "Pagamento recebido! Seu saldo foi atualizado ✔"; done.className = "ok center"; S.onCredit = null; } };
+    S.onCredit = (id) => { if (id === o.identifier) { done.textContent = "Pagamento recebido! Seu saldo foi atualizado."; done.className = "ok center"; S.onCredit = null; } };
     void close;
   };
 
@@ -445,7 +505,7 @@
     const amount = h("input", { inputMode: "decimal", placeholder: "Mínimo R$ 20,00", maxLength: 9 });
     const type = h("select", { class: "chip" }, [["cpf", "CPF"], ["cnpj", "CNPJ"], ["email", "E-mail"], ["phone", "Telefone"], ["random", "Chave aleatória"]].map(([v, t]) => h("option", { value: v, text: t })));
     const key = h("input", { placeholder: "Sua chave Pix", maxLength: 140, autocomplete: "off" });
-    modal("Sacar saldo", h("div", {}, h("p", { class: "dim", text: "Saldo: " + money(S.me.balance_cents) }), h("div", { class: "label", text: "VALOR (R$)" }), amount, h("div", { class: "label", text: "TIPO DA CHAVE" }), type, h("div", { class: "label", text: "CHAVE PIX" }), key), (close) => [
+    modal("Sacar saldo", h("div", {}, h("p", { class: "dim", text: "Saldo: " + money(S.me.balance_cents) }), h("div", { class: "label", text: "Valor (R$)" }), amount, h("div", { class: "label", text: "Tipo da chave" }), type, h("div", { class: "label", text: "Chave Pix" }), key), (close) => [
       btn("Continuar", () => {
         const c = parseCents(amount.value);
         if (!c || c < 2000) return toast("O saque mínimo é R$ 20,00.");
@@ -467,10 +527,10 @@
     const calc = h("p", { class: "dim" });
     const upd = () => { const c = parseCents(stake.value); calc.textContent = c ? "Cada jogador paga " + money(c + feeOf(c)) + ". O vencedor leva " + money(c * 2) + "." : "Mínimo " + money(Game.cfg.minStakeCents) + " • máximo " + money(Game.cfg.maxStakeCents); };
     stake.addEventListener("input", upd); upd();
-    const codeBox = h("div", { hidden: true }, h("div", { class: "label", text: "CÓDIGO DA SALA" }), code);
+    const codeBox = h("div", { hidden: true }, h("div", { class: "label", text: "Código da sala" }), code);
     const custom = h("button", { class: "link", type: "button", text: "Personalizar código", onclick: () => { codeBox.hidden = false; custom.hidden = true; } });
-    modal("Criar sala", h("div", {}, h("p", { class: "faint", text: "Só entra quem tiver o código da sala." }), h("div", { class: "label", text: "NOME DA SALA" }), name, h("div", { class: "label", text: "VALOR DO X1 (R$)" }), stake, calc,
-      h("div", { class: "label", text: "MINAS POR JOGADOR" }), h("div", { class: "row" }, btn("−", () => { if (mines > 1) num.textContent = String(--mines); }, "ghost"), num, btn("+", () => { if (mines < Game.cfg.maxMines) num.textContent = String(++mines); }, "ghost")),
+    modal("Criar sala", h("div", {}, h("p", { class: "faint", text: "Só entra quem tiver o código da sala." }), h("div", { class: "label", text: "Nome da sala" }), name, h("div", { class: "label", text: "Valor do x1 (R$)" }), stake, calc,
+      h("div", { class: "label", text: "Minas por jogador" }), h("div", { class: "row" }, btn("−", () => { if (mines > 1) num.textContent = String(--mines); }, "ghost"), num, btn("+", () => { if (mines < Game.cfg.maxMines) num.textContent = String(++mines); }, "ghost")),
       custom, codeBox), (close) => [
       btn("Criar sala", () => {
         const n = name.value.trim(), c = parseCents(stake.value), cd = code.value.trim().toUpperCase();
@@ -527,7 +587,7 @@
     }
     return g;
   };
-  const mark = (c, cls, sym) => { c.classList.add(cls); c.textContent = sym; };
+  const mark = (c, cls, sym) => { c.classList.add(cls); c.replaceChildren(sym ? ic(sym, 22) : ""); };
   const has = (arr, i) => Array.isArray(arr) && arr.includes(i);
 
   const renderRoom = () => {
@@ -543,8 +603,8 @@
   const roomHeader = (st, sub) => [h("h1", { text: st.name }), h("p", { class: "dim", text: sub }), h("p", { class: "dim", text: st.mines + " minas • Valor " + money(st.stakeCents) + " • Taxa " + money(st.feeCents) })];
 
   const roomWaiting = (st) => [...roomHeader(st, "Aguardando seu adversário entrar…"),
-    h("div", { class: "card center" }, h("div", { class: "label", text: "CÓDIGO DA SALA" }), h("div", { class: "big", text: st.code }), h("p", { class: "faint", text: "Só entra quem tiver o código da sala." }),
-      btn("Copiar código", async (ev) => { try { await navigator.clipboard.writeText(st.code); ev.target.textContent = "Copiado ✔"; } catch (_) { toast("Não deu para copiar."); } })), leaveBtn()];
+    h("div", { class: "card center" }, h("div", { class: "label", text: "Código da sala" }), h("div", { class: "big", text: st.code }), h("p", { class: "faint", text: "Só entra quem tiver o código da sala." }),
+      btn("Copiar código", async (ev) => { const b = ev.currentTarget; try { await navigator.clipboard.writeText(st.code); b.replaceChildren(ic("check", 18), "Copiado"); } catch (_) { toast("Não deu para copiar."); } })), leaveBtn()];
 
   const vsRow = (st, extra) => {
     const row = h("div", { class: "vs" });
@@ -577,14 +637,14 @@
     return [...roomHeader(st, "Pagamento da partida"), h("div", { class: "card" }, h("p", { text: "Valor do x1: " + money(st.stakeCents) }), h("p", { text: "Taxa do app: " + money(st.feeCents) }), h("p", { class: "big", text: "Total: " + money(total) }),
       h("p", { class: "faint", text: "O vencedor leva " + money(st.stakeCents * 2) + ". Se a partida for cancelada antes de começar, o valor volta para o seu saldo." })),
       h("p", { class: "dim mt14" }, "Seu saldo: ", h("b", { "data-bal": "1", text: money(S.me.balance_cents) })),
-      me && me.paid ? h("p", { class: "ok center mt14", text: "✔ Pagamento feito. Aguardando o adversário pagar…" }) : pay, timer, leaveBtn("Cancelar e sair")];
+      me && me.paid ? h("p", { class: "ok iline mt14" }, ic("check", 18), "Pagamento feito. Aguardando o adversário pagar…") : pay, timer, leaveBtn("Cancelar e sair")];
   };
 
   const roomPlacing = (st) => {
     const me = meOf(st), need = st.mines, timer = h("p", { class: "dim center mt14" });
     Game.tickFn = () => { if (st.deadline) timer.textContent = "Tempo: " + secondsLeft(st.deadline) + "s"; };
     if (me && me.placed) {
-      return [h("h1", { text: "Esconda suas minas" }), h("p", { class: "ok", text: "✔ Minas escondidas" }), board("", (c, i) => { if (has(st.myMines, i)) mark(c, "bomb", "💣"); }, null),
+      return [h("h1", { text: "Esconda suas minas" }), h("p", { class: "ok iline" }, ic("check", 18), "Minas escondidas"), board("", (c, i) => { if (has(st.myMines, i)) mark(c, "bomb", "bomb"); }, null),
         h("p", { class: "dim center mt14", text: "Aguardando o adversário terminar a configuração das minas" }), timer, leaveBtn("Cancelar e sair")];
     }
     const sel = new Set();
@@ -596,7 +656,7 @@
     go.disabled = true;
     const bd = board("", () => {}, (i, c) => {
       if (sel.has(i)) { sel.delete(i); c.classList.remove("sel"); c.textContent = ""; }
-      else if (sel.size < need) { sel.add(i); mark(c, "sel", "💣"); }
+      else if (sel.size < need) { sel.add(i); mark(c, "sel", "bomb"); }
       counter.textContent = sel.size + " / " + need; go.disabled = sel.size !== need;
     });
     return [h("h1", { text: "Esconda suas minas" }), h("p", { class: "dim", text: "Escolha " + need + " casa(s) do SEU tabuleiro. O adversário vai tentar adivinhar onde elas estão." }), bd, counter, go, timer, leaveBtn("Cancelar e sair")];
@@ -619,13 +679,13 @@
     }
     const myTurn = st.turn === st.you, timer = h("div", { class: "timer" });
     Game.tickFn = () => { if (st.deadline) { const s = secondsLeft(st.deadline); timer.textContent = s + "s"; timer.classList.toggle("bad", s <= 5); } };
-    const opBoard = board("", (c, i) => { if (has(st.myPicks, i)) mark(c, "okc", "✔"); }, myTurn ? (i, c) => { if (!has(st.myPicks, i) && Game.send("pick", { cell: i })) c.textContent = "…"; } : null);
+    const opBoard = board("", (c, i) => { if (has(st.myPicks, i)) mark(c, "okc", "check"); }, myTurn ? (i, c) => { if (!has(st.myPicks, i) && Game.send("pick", { cell: i })) c.textContent = "…"; } : null);
     const myBoard = board("small", (c, i) => {
       const bomb = has(st.myMines, i), hit = has(st.hitsOnMe, i);
-      if (bomb && hit) mark(c, "bomb", "💥"); else if (bomb) mark(c, "sel", "💣"); else if (hit) mark(c, "okc", "✔");
+      if (bomb && hit) mark(c, "bomb", "blast"); else if (bomb) mark(c, "sel", "bomb"); else if (hit) mark(c, "okc", "check");
     }, null);
     return [h("h2", { text: st.name }), h("p", { class: myTurn ? "ok" : "dim", text: myTurn ? "Sua vez! Abra uma casa do tabuleiro do adversário." : "Vez de " + ((opp && opp.name) || "adversário") + "…" }), timer,
-      h("div", { class: "duel" }, h("div", {}, h("div", { class: "label", text: "TABULEIRO DE " + String((opp && opp.name) || "ADVERSÁRIO").toUpperCase() }), opBoard), h("div", {}, h("div", { class: "label", text: "SEU TABULEIRO" }), myBoard)), leaveBtn("Desistir e sair")];
+      h("div", { class: "duel" }, h("div", {}, h("div", { class: "label", text: "Tabuleiro de " + ((opp && opp.name) || "adversário") }), opBoard), h("div", {}, h("div", { class: "label", text: "Seu tabuleiro" }), myBoard)), leaveBtn("Desistir e sair")];
   };
 
   const roomOver = (st) => {
@@ -633,9 +693,9 @@
     const why = { mina: won ? "O adversário abriu uma mina." : "Você abriu uma mina.", tempo: "O tempo/casas acabaram.", abandono: won ? "O adversário saiu da partida." : "Você saiu da partida." }[res.reason] || "";
     const note = st.opponentLeft ? "O adversário saiu da sala." : rm.you ? "Revanche pedida. Aguardando o adversário…" : rm.opp ? "O adversário pediu revanche!" : "";
     const opp = res.oppMines || [];
-    return [h("div", { class: "big mt20", text: won ? "🏆" : "✖" }), h("h1", { class: "center " + (won ? "ok" : "bad"), text: won ? "Você ganhou!" : "Você perdeu" }), why ? h("p", { class: "dim center", text: why }) : null,
+    return [h("div", { class: "hero " + (won ? "win" : "lose") }, ic(won ? "trophy" : "x", 42)), h("h1", { class: "center " + (won ? "ok" : "bad"), text: won ? "Você ganhou!" : "Você perdeu" }), why ? h("p", { class: "dim center", text: why }) : null,
       h("p", { class: "big", text: won ? "+ " + money(res.prizeCents) + " no seu saldo" : "- " + money(st.stakeCents + st.feeCents) }),
-      opp.length ? [h("div", { class: "label", text: "MINAS DO ADVERSÁRIO" }), board("small", (c, i) => { if (has(opp, i)) mark(c, "bomb", "💣"); else if (has(st.myPicks, i)) mark(c, "okc", "✔"); }, null)] : null,
+      opp.length ? [h("div", { class: "label", text: "Minas do adversário" }), board("small", (c, i) => { if (has(opp, i)) mark(c, "bomb", "bomb"); else if (has(st.myPicks, i)) mark(c, "okc", "check"); }, null)] : null,
       note ? h("p", { class: "dim center mt14", text: note }) : null, !st.opponentLeft && !rm.you ? btn("Pedir revanche", () => Game.send("rematch")) : null,
       btn(won ? "Terminar partida" : "Voltar para o Lobby", () => Game.send("leave"), "ghost")];
   };
